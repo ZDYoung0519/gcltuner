@@ -29,18 +29,21 @@ This repository is built to achieve Generalized Continual Learning of Multimodal
 
 
 ## 🔥 News
-- [2026/06/25] [GCLTUner](https://www.github.com/zdyoung0519/gcltuner) is released.
+- [2026/06/25] [GCLTUner](https://github.com/zdyoung0519/gcltuner) is released.
 
 ## ✋ Features
 
 Continual Instruction Tuning (CIT) Methods:
 - [x] LoRA: Fine-Tuning with LoRA modules.
-- [ ] [EWC](): LoRA Fine-tuning with EWC penalization.
-- [ ] [LwF](): LoRA Fine-tuning with LwF penalization.
 - [x] MoELoRA: Fine-Tuning with Mixture of LoRA modules.
-- [x] [HiDe-LLaVA](): Expand and match LoRA moduls at the top layer, while fuse 
-- [x] [DISCO]()
-- [x] [AlignCL](): Algnment-centricl Continual Adaptation for MLLMs
+
+Working in process...
+<!-- - [ ] [EWC](): LoRA Fine-tuning with EWC penalization.
+- [ ] [LwF](): LoRA Fine-tuning with LwF penalization. -->
+- [ ] [OLoRA]()
+- [ ] [HiDe-LLaVA]()
+- [ ] [DISCO]()
+- [ ] [AlignCL](): Algnment-centricl Continual Adaptation for MLLMs
 <!-- - [ ] [Replay](): Replay previous data. -->
 <!-- - [ ] [L2P](): Construct a pool of learnable prompts, and select the prompt that is most relative to the input. -->
 <!-- - [ ] [MR-LoRA](https://arxiv.org/abs/2506.05453): Train isolated LoRA modules for tasks and a Router LoRA to select LoRA at inference.
@@ -81,49 +84,61 @@ pip install -e '.[all]' -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
 Please refer to ```docs/datasets```.
 
 #### 2.2 Model Preparation
-##### 2.2.1 LLaVA 
-For ```LLaVA-v1.5``` model ```without``` pretraining and instruction-tuning, you need to download download `vicuna-7b-v1.5` and `clip-vit-large-patch14-336`:
+##### 2.2.1 Vicuna
+For ```VIcuna-v1.5-7b``` model (```without``` LLaVA pretraining and instruction-tuning), you need to download download `vicuna-7b-v1.5` and `clip-vit-large-patch14-336`:
 ```
-huggingface-cli download lmsys/vicuna-7b-v1.5 --local-dir /storage/huggingface/lmsys/vicuna-7b-v1.5
-huggingface-cli download openai/clip-vit-large-patch14-336 --local-dir /storage/huggingface/openai/clip-vit-large-patch14-336
+huggingface-cli download lmsys/vicuna-7b-v1.5 --local-dir $YOUR_MODEL_PATH/lmsys/vicuna-7b-v1.5
+huggingface-cli download openai/clip-vit-large-patch14-336 --local-dir $YOUR_MODEL_PATH/openai/clip-vit-large-patch14-336
 ```
 For ```LLaVA-v1.5``` model ```with pretrained MLP```  weights, you need to run the fowllowing cmd to download the pre-training weights and covert it into `xtuner` format:
 ```
 # download llava-v1.5-mlp2x
 huggingface-cli download liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5  \ 
---local-dir /storage/huggingface/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5
+--local-dir $YOUR_MODEL_PATH/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5
 
 # convert it into xtuner format
 python ./gcltuner/tools/convert_projector_to_xtuner.py \
- --src_path /storage/huggingface/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector.bin  \
- --dst_path /storage/huggingface/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector_xtuner.pt
+ --src_path $YOUR_MODEL_PATH/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector.bin  \
+ --dst_path /$YOUR_MODEL_PATH/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector_xtuner.pt
 ```
 If you want to use the `full weights` of `LLaVA-v1.5`, you need to run the fowllowing cmd to download and covert them into `xtuner` format:
 ```
 # download llava-v1.5-mlp2x
-huggingface-cli download liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5  --local-dir /storage/huggingface/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5
+huggingface-cli download liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5  --local-dir $YOUR_MODEL_PATH/liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5
 
 # convert it into xtuner format
 python gcltuner/tools/covert_huggingface_llava_projector_to_xtuner_type.py \
-  --src_path /data2/zdy/huggingface/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector.bin \
-  --dst_path /data2/zdy/huggingface/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector_xtuner.pt
+  --src_path $YOUR_MODEL_PATH/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector.bin \
+  --dst_path $YOUR_MODEL_PATH/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5/mm_projector_xtuner.pt
 ```
 NOTE: After downloading them, you need to modify the path in `gcltuner/data.py`.
 
 
 
 ### 3. Train And Evaluate
-We provide the training and evaluation scripts in ```scripts```. Take ```ucit_llava_v15pf_lora``` as an example, you can run the following command to train and evalute the model:
+We provide the training and evaluation scripts in ```projects/${method_name}/experiments/{$exp_name}```. For example, if you want to perform `LoRA` finetuneing on `UCIT` benchmarks, with `LLaVA-v1.5-7b` as initialization, run the following cmd:
 ```
 bash ./projects/lora/experiments/ucit_llava_v15_7b_inst/run_all.sh
 ```
-The naming convention for the experiment folders is as follows:
+The naming convention for the exp_name is as follows:
 ```
 ucit_llava_v15_7b_inst
 {benchmark}_{architecture}_{version&model_size}_{pretrains}
 ```
+This represents that the MLLM is initialized with the LLaVA-v1.5-7B model that has undergone both pretraining and instruction fine-tuning.
 
-The above folder represents that the MLLM is initialized with the LLaVA-v1.5-7B model that has undergone both pretraining and instruction fine-tuning.
+The outputs are organized as:
+```
+# The training log and model weights
+work_dirs/ucit_llava_v15_7b_inst/lora/task${t}
+
+# the evaluation results on task i after fintuning task j
+work_dirs/ucit_llava_v15_7b_inst/lora/eval/task${i}/task${j}
+
+# Overoll continual performance
+work_dirs/ucit_llava_v15_7b_inst/lora/eval/metric_matrix.csv
+```
+
 
 
 ## 🤝 Acknowledgement
