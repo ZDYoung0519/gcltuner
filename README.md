@@ -8,10 +8,10 @@
 
 <!-- [//]: # (<img src=".\resources\image.png">)
  -->
-[![GitHub Repo stars](https://img.shields.io/github/stars/zdyoung0519/cltuner?style=social)](https://github.com/zdyoung0519/cltuner/stargazers)
-[![license](https://img.shields.io/github/license/zdyoung0519/cltuner.svg)](https://github.com/zdyoung0519/cltuner/blob/main/LICENSE)
-[![issue resolution](https://img.shields.io/github/issues-closed-raw/zdyoung0519/cltuner)](https://github.com/zdyoung0519/cltuner/issues)
-[![open issues](https://img.shields.io/github/issues-raw/zdyoung0519/cltuner)](https://github.com/zdyoung0519/cltuner/issues)
+[![GitHub Repo stars](https://img.shields.io/github/stars/zdyoung0519/cltuner?style=social)](https://github.com/zdyoung0519/gcltuner/stargazers)
+[![license](https://img.shields.io/github/license/zdyoung0519/cltuner.svg)](https://github.com/zdyoung0519/gcltuner/blob/main/LICENSE)
+[![issue resolution](https://img.shields.io/github/issues-closed-raw/zdyoung0519/cltuner)](https://github.com/zdyoung0519/gcltuner/issues)
+[![open issues](https://img.shields.io/github/issues-raw/zdyoung0519/cltuner)](https://github.com/zdyoung0519/gcltuner/issues)
 
 <div align="center">
   <img src="./resources/image.png" width="100%" alt="GCLTuner">
