@@ -37,11 +37,11 @@ Then you need to download the images for each task:
 |Image Source | Download Path|
 | :-: | :-: |
 |ArxivQA|[images](https://huggingface.co/datasets/MMInstruction/ArxivQA/tree/main)|
-|ImageNet-R|Provided at UCIT/Imaget-R|
+|ImageNet-R|Provided in UCIT/Imaget-R|
 |IconQA|[images](https://iconqa.github.io/)|
 |CLEVR-Math|[images](https://huggingface.co/datasets/dali-does/clevr-math/tree/main)|
 |VizWiz|[images](https://vizwiz.org/tasks-and-datasets/image-captioning/)|
-|Flickr30k|(Provided at UCIT/Flickr30k)
+|Flickr30k|(Provided in UCIT/Flickr30k)
 
 And organize them as follows:
 
