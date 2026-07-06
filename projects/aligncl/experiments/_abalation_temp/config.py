@@ -144,8 +144,11 @@ model = dict(
         pretrained_expert_router_path=""
     ),
     projector_args=dict(
-        projector_type="itaa"
-    )
+        projector_type="itaa",
+
+    ),
+    temperature_v=0.01,
+    temperature_l=1
 )
 
 #######################################################################
@@ -254,7 +257,7 @@ test_dataset = [
     ),
     dict(
         type=UcitBaseEvalDataset,
-        metainfo=dict(name='ArixvQA'),
+        metainfo=dict(name='ArxivQA'),
         data_path=data_root+"ArxivQA/test_3000.json",
         image_folder=image_folder,
         tokenizer=tokenizer,
@@ -342,7 +345,7 @@ optim_wrapper = dict(
         bypass_duplicate=True,
         custom_keys={
             'projector.model': dict(lr_mult=0.1),
-            'projector.mm_projectors.': dict(lr_mult=0.1)
+            # 'projector.mm_projectors.': dict(lr_mult=0.1)
         },
     )
 )

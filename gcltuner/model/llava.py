@@ -88,7 +88,7 @@ class LLaVAModel(XTunerLLaVAModel):
                     # print(n, p.shape)
                     count += p.numel()
                 total += p.numel()
-            print(f"Total parameters: {total / 1024 / 1024} M, trainable: {count/1024/1024} M", 'current')
+            print_log(f"Total parameters: {total / 1024 / 1024} M, trainable: {count/1024/1024} M", 'current')
 
     def load_checkpoint(self, ckpt_path):
         if ckpt_path is not None:

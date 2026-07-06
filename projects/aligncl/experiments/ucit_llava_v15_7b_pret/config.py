@@ -44,8 +44,8 @@ from projects.aligncl.model.llava import AlignclLLaVAModel
 with read_base():
     from .....gcltuner.data import (
         clip_vit_large_p14_336,
-        llava_v15_7b,
-        llava_v15_7b_projector, 
+        vicuna_v15_7b,
+        vicuna_v15_7b_llava_pretrain_projector,
         data_root_ucit,
         data_root_ucit_offline,
         image_folder_ucit
@@ -55,10 +55,10 @@ with read_base():
 #                          PART 1  Settings                           #
 #######################################################################
 # Model
-llm_name_or_path = llava_v15_7b
+llm_name_or_path = vicuna_v15_7b
 visual_encoder_name_or_path = clip_vit_large_p14_336
 # Specify the pretrained pth
-pretrained_pth = llava_v15_7b_projector
+pretrained_pth = vicuna_v15_7b_llava_pretrain_projector
 
 # Data
 data_root = data_root_ucit
@@ -141,8 +141,11 @@ model = dict(
     expert_router_args=dict(
         expert_router_bias=False, 
         expert_router_input_featuers="both",
-        expert_router_temp=1,
+        expert_router_temp=0.001,
         pretrained_expert_router_path=""
+    ),
+    projector_args=dict(
+        projector_type="itaa"
     )
 )
 
@@ -252,7 +255,7 @@ test_dataset = [
     ),
     dict(
         type=UcitBaseEvalDataset,
-        metainfo=dict(name='ArixvQA'),
+        metainfo=dict(name='ArxivQA'),
         data_path=data_root+"ArxivQA/test_3000.json",
         image_folder=image_folder,
         tokenizer=tokenizer,
@@ -337,7 +340,11 @@ optim_wrapper = dict(
     loss_scale="dynamic",
     dtype="float16",
     paramwise_cfg=dict(
-        custom_keys={'projector.model': dict(lr_mult=0.1)}
+        bypass_duplicate=True,
+        custom_keys={
+            'projector.model': dict(lr_mult=0.1),
+            # 'projector.mm_projectors.': dict(lr_mult=0.1)
+        },
     )
 )
 

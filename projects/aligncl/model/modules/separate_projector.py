@@ -76,7 +76,7 @@ class LightWeightSeparateProjectorModel(nn.Module):
         expert_weights = self.expert_weights
         active_experts = torch.nonzero(expert_weights).squeeze(-1)
         for i in active_experts.tolist():
-            result += self.mm_projectors[i](x)
+            result += self.mm_projectors[i](x) * expert_weights[i]
             
         if self.use_base:
             result += self.base_projector(x)

@@ -273,7 +273,7 @@ test_dataset = [
     ),
     dict(
         type=UcitBaseEvalDataset,
-        metainfo=dict(name='ArixvQA'),
+        metainfo=dict(name='ArxivQA'),
         data_path=data_root+"ArxivQA/test_3000.json",
         image_folder=image_folder,
         tokenizer=tokenizer,

@@ -1,16 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch
-from mmengine.hooks import (
-    CheckpointHook,
-    DistSamplerSeedHook,
-    IterTimerHook,
-    LoggerHook,
-    ParamSchedulerHook,
-)
-from mmengine.optim import AmpOptimWrapper, CosineAnnealingLR, LinearLR
 
 from torch.optim import AdamW
-
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -20,8 +11,19 @@ from transformers import (
     CLIPTextModel,
     CLIPTokenizer
 )
-from mmengine.dataset import DefaultSampler
 
+from mmengine.config import read_base
+from mmengine.dataset import DefaultSampler
+from mmengine.optim import AmpOptimWrapper, CosineAnnealingLR, LinearLR
+from mmengine.hooks import (
+    CheckpointHook,
+    DistSamplerSeedHook,
+    IterTimerHook,
+    LoggerHook,
+    ParamSchedulerHook,
+)
+
+# from xtuner.dataset import ConcatDataset, LLaVADataset
 from xtuner.dataset import ConcatDataset
 from xtuner.dataset.collate_fns import default_collate_fn
 from xtuner.dataset.map_fns import llava_map_fn, template_map_fn_factory
@@ -30,20 +32,19 @@ from xtuner.engine.hooks import DatasetInfoHook
 from xtuner.engine.runner import TrainLoop
 from xtuner.utils import PROMPT_TEMPLATE
 
-from peft import MoedyraConfig, LoraConfig
-from gcltuner.dataset.collate_fns.mm_collate_fn import mm_collate_fn
+from peft import AlignclMoeLoraConfig
+
+# from gcltuner.model import LLaVAModel
 from gcltuner.dataset.llava import LLaVADataset
-from gcltuner.dataset.evaluation.ucit_eval_dataset import UcitBaseEvalDataset, UcitCaptionEvalDataset
+from gcltuner.dataset import mm_collate_fn, UcitBaseEvalDataset, UcitCaptionEvalDataset
 from gcltuner.engine.runner.loops import TrainLoop, TestLoop
 
-from projects.aligncl.model import AlignclLLaVAModel
+from projects.aligncl.model.llava import AlignclLLaVAModel
 
-from mmengine.config import read_base
 with read_base():
-    from ....gcltuner.data import (
+    from .....gcltuner.data import (
         clip_vit_large_p14_336,
-        llava_v15_7b, 
-        llava_v15_7b_projector,
+        vicuna_v15_7b,
         data_root_ucit,
         data_root_ucit_offline,
         image_folder_ucit
@@ -53,22 +54,23 @@ with read_base():
 #                          PART 1  Settings                           #
 #######################################################################
 # Model
-llm_name_or_path = llava_v15_7b
+llm_name_or_path = vicuna_v15_7b
 visual_encoder_name_or_path = clip_vit_large_p14_336
 # Specify the pretrained pth
-pretrained_pth = llava_v15_7b_projector
+pretrained_pth = None
 
 # Data
 data_root = data_root_ucit
 data_root_offline = data_root_ucit_offline
 image_folder = image_folder_ucit
 prompt_template = PROMPT_TEMPLATE.vicuna
-max_length = int(2048 - (336 / 14) ** 2)
+# max_length = int(2048 - (336 / 14) ** 2)
+max_length = 2048
 SYSTEM = ""
 sample_ratio = 1
 
 # Scheduler & Optimizer
-batch_size = 16  # per_device
+batch_size = 8  # per_device
 accumulative_counts = 1
 dataloader_num_workers = 4
 max_epochs = 1
@@ -80,7 +82,7 @@ max_norm = 1  # grad clip
 warmup_ratio = 0.03
 
 # Save
-save_steps = 200
+save_steps = 1000
 save_total_limit = 2  # Maximum checkpoints to keep (-1 means unlimited)
 
 #######################################################################
@@ -99,29 +101,6 @@ image_processor = dict(
     trust_remote_code=True,
 )
 
-llm_lora_base=dict(
-    type=LoraConfig,
-    r=128,
-    lora_alpha=256,
-    lora_dropout=0.05,
-    bias="none",
-    task_type="CAUSAL_LM",
-)
-
-llm_lora=dict(
-    type=MoedyraConfig,
-    r=16,
-    lora_alpha=32,
-    lora_dropout=0.05,
-    bias="none",
-    task_type="CAUSAL_LM",
-    num_experts=6,
-    lora_init_file="",
-    cur_task=0, 
-    train_cur_lora_only=True,
-    target_modules=['q_proj', 'k_proj', 'v_proj', 'down_proj', 'up_proj', 'o_proj', 'gate_proj']
-)
-
 model = dict(
     type=AlignclLLaVAModel,
     freeze_llm=True,
@@ -131,42 +110,42 @@ model = dict(
         type=AutoModelForCausalLM.from_pretrained,
         pretrained_model_name_or_path=llm_name_or_path,
         trust_remote_code=True,
-        torch_dtype=torch.float16
+        torch_dtype=torch.float16,
     ),
-    llm_lora=llm_lora,
+    llm_lora=dict(
+        type=AlignclMoeLoraConfig,
+        expert_num=6,
+        cur_task=0,
+        train_cur_lora_only=True,
+        r=96,
+        lora_alpha=192,
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+    ),
     visual_encoder=dict(
         type=CLIPVisionModel.from_pretrained,
         pretrained_model_name_or_path=visual_encoder_name_or_path,
     ),
     text_encoder=dict(
         type=CLIPTextModel.from_pretrained,
-        pretrained_model_name_or_path=visual_encoder_name_or_path
+        pretrained_model_name_or_path=visual_encoder_name_or_path,
     ),
     text_tokenizer=dict(
         type=CLIPTokenizer.from_pretrained,
-        pretrained_model_name_or_path=visual_encoder_name_or_path
+        pretrained_model_name_or_path=visual_encoder_name_or_path,
     ),
     cur_task=0,
-    projector_args=dict(
-        type='taa',
-        num_experts=6,
-        visual_select_layers=[3, 8, 24],
-        freeze_previous_experts=True,
-        freeze_shared_expert_after_first_task=True,
+    expert_num=6,
+    expert_router_args=dict(
+        expert_router_bias=False, 
+        expert_router_input_featuers="both",
+        expert_router_temp=0.001,
+        pretrained_expert_router_path=""
     ),
-    router_args=dict(
-        num_experts=6,
-        router_bias=True,
-        router_temp=0.001,
-        router_loss_ceof=0.001,
-        router_topk=1,
-        router_frozen=True,
-        forward_cur_expert_only=True,
-        trained_router_path=None,
+    projector_args=dict(
+        projector_type="itaa"
     )
-    # visual_encoder_lora=dict(
-    #     type=LoraConfig, r=64, lora_alpha=16, lora_dropout=0.05, bias="none"
-    # ),
 )
 
 #######################################################################
@@ -257,7 +236,7 @@ train_dataloader = dict(
         length_property="modality_length",
         per_device_batch_size=batch_size * accumulative_counts,
     ),
-    collate_fn=dict(type=mm_collate_fn, extra_collate_keys=['text'])
+    collate_fn=dict(type=mm_collate_fn, extra_collate_keys=['text']),
 )
 
 test_dataset = [
@@ -360,7 +339,11 @@ optim_wrapper = dict(
     loss_scale="dynamic",
     dtype="float16",
     paramwise_cfg=dict(
-        custom_keys={'projector.': dict(lr_mult=0.1), 'projector_taa.': dict(lr_mult=0.1)}
+        bypass_duplicate=True,
+        custom_keys={
+            'projector.model': dict(lr_mult=0.1),
+            # 'projector.mm_projectors.': dict(lr_mult=0.1)
+        },
     )
 )
 

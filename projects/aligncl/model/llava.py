@@ -10,8 +10,9 @@ from xtuner.model.utils import (
 from mmengine import print_log
 from mmengine.dist import get_rank
 
-from .modules.separate_projector import ProjectorConfig, SeparateProjectorModel, LightWeightSeparateProjectorModel
+from .modules.separate_projector import ProjectorConfig, LightWeightSeparateProjectorModel
 from .modules.itaa import ITAAMoEProjectors
+
 
 class AlignclLLaVAModel(LLaVAModel):
     def __init__(
@@ -79,8 +80,10 @@ class AlignclLLaVAModel(LLaVAModel):
         if hasattr(self.llm, "_init_cur_lora"):
             self.llm._init_cur_lora(cur_task)        
 
-        if self.projector_type == "mlp+moadapter" or 'itaa':
+        if self.projector_type == "mlp+moadapter":
             self.projector._init_cur_weights_with_previous(cur_task)
+        elif self.projector_type == "itaa":
+            self.itaa_projector._init_cur_weights_with_previous(cur_task)
 
         self.log_trainable_parameters()
 
@@ -157,39 +160,54 @@ class AlignclLLaVAModel(LLaVAModel):
             self.projector = projector_new
         elif projector_type == 'itaa':
 
-            config = ProjectorConfig(
-                visual_hidden_size=self.visual_encoder.config.hidden_size,
-                llm_hidden_size=self.llm.config.hidden_size,
-                depth=self.projector_depth,
-            )
-            projector_new = LightWeightSeparateProjectorModel(
-                config=config,
-                num_expert=self.expert_num,
-                use_base=False,
-                hidden_scale=1/2
-            )
-            projector_new.base_projector = self.projector
-            projector_new.use_base = True
-            if self.cur_task > 0:
-                self.projector.requires_grad_(False)
-            if projector_config.get("train_cur_projector_only", True):
-                for j in range(self.expert_num):
-                    projector_new.mm_projectors[j].requires_grad_(j == self.cur_task)
-            del self.projector
-            self.projector = projector_new
+            # config = ProjectorConfig(
+            #     visual_hidden_size=self.visual_encoder.config.hidden_size,
+            #     llm_hidden_size=self.llm.config.hidden_size,
+            #     depth=self.projector_depth,
+            # )
+            # projector_new = LightWeightSeparateProjectorModel(
+            #     config=config,
+            #     num_expert=self.expert_num,
+            #     use_base=False,
+            #     hidden_scale=1/2
+            # )
+            # projector_new.base_projector = self.projector
+            # projector_new.use_base = True
+            # if self.cur_task > 0:
+            #     self.projector.requires_grad_(False)
+            # if projector_config.get("train_cur_projector_only", True):
+            #     for j in range(self.expert_num):
+            #         projector_new.mm_projectors[j].requires_grad_(j == self.cur_task)
+            # del self.projector
+            # self.projector = projector_new
         
             self.itaa_projector = ITAAMoEProjectors(
-                visual_select_layers=projector_config.get('itaa_visual_select_layers', [3, 8 ,16]),
-                layer_topk=projector_config.get('visual_select_layers', [3, 8 ,16]),
+                visual_select_layers=projector_config.get('itaa_visual_select_layers', [3, 8, 23]),
+                layer_topk=projector_config.get('visual_select_layers', 3),
                 visual_hidden_size=self.visual_encoder.config.hidden_size,
                 num_visual_layers=self.visual_encoder.config.num_hidden_layers,
                 text_hidden_size=self.text_encoder.config.hidden_size,
                 llm_hidden_size=self.llm.config.hidden_size,
                 expert_num=self.expert_num,
-                expert_hidden_size=self.visual_encoder.config.hidden_size//2,
+                expert_hidden_size=self.visual_encoder.config.hidden_size,
+                use_shared_expert=True,
+                shared_expert_hidden_size=self.visual_encoder.config.hidden_size,
                 cur_task=self.cur_task,
             )
-            self.itaa_ceof = projector_config.get('itaa_ceof', 0.1),
+            self.itaa_ceof = projector_config.get('itaa_ceof', 1)
+            if self.cur_task > 0:
+                self.projector.requires_grad_(False)
+
+            for m in range(self.itaa_projector.num_visual_select_layers):
+                if self.cur_task > 0:
+                    if self.itaa_projector.all_layer_projectors[m].use_shared_expert:
+                        self.itaa_projector.all_layer_projectors[m].shared_expert.requires_grad_(False)
+                for j in range(self.expert_num):
+                    self.itaa_projector.all_layer_projectors[m].projector_pool[j].requires_grad_(j == self.cur_task)
+            
+            for j in range(self.expert_num):
+                self.itaa_projector.align_linears.weights_pool[j].requires_grad_(j == self.cur_task)
+
         else:
             raise NotImplementedError
     
@@ -208,7 +226,8 @@ class AlignclLLaVAModel(LLaVAModel):
             ori_features = self.projector(
                 visual_outputs.hidden_states[self.visual_select_layer][:, 1:]
             )
-            fusion_features = self.itaa_projector(visual_outputs, text_outputs)
+            attention, fusion_features = self.itaa_projector(visual_outputs, text_outputs)
+            self.itaa_attention = attention
             return ori_features + self.itaa_ceof * fusion_features
         else:
             raise NotImplementedError
@@ -227,6 +246,8 @@ class AlignclLLaVAModel(LLaVAModel):
             output = self.generate(data, data_samples)
             output['router_weights_l'] = self.router_weights_l.detach().cpu().tolist()
             output['router_weights_v'] = self.router_weights_v.detach().cpu().tolist()
+            if hasattr(self, 'itaa_attention'):
+                output['itaa_attention'] = self.itaa_attention.detach().cpu().squeeze(1).tolist()
             return output
         elif mode == "tensor":
             return self._forward(data, data_samples)
@@ -268,15 +289,28 @@ class AlignclLLaVAModel(LLaVAModel):
                 expert_router_logits = self._forward_expert_router(visual_outputs, text_outputs)
                 
                 router_logits_v = expert_router_logits / self.temperature_v
-                router_logits_v[:, (self.cur_task+1):] = -float('inf') # mask unseen task logits
+                router_logits_v[:, (self.cur_task+1):] = -float('inf') # mask unseen task logit
+                K=min(self.cur_task+1, 3)
+                topk_indices_v = torch.topk(router_logits_v, K, dim=-1).indices
+                mask_v = torch.zeros_like(router_logits_v, dtype=torch.bool)
+                mask_v.scatter_(1, topk_indices_v, True)
+                router_logits_v[~mask_v] = -float('inf')  # 非 Top-K 设为 -inf
                 self.router_weights_v = nn.Softmax(dim=-1)(router_logits_v).mean(dim=0)
                 
                 router_logits_l = expert_router_logits / self.temperature_l
                 router_logits_l[:, (self.cur_task+1):] = -float('inf') # mask unseen task logits
+                K=min(self.cur_task+1, 3)
+                topk_indices_l = torch.topk(router_logits_l, K, dim=-1).indices
+                mask_l = torch.zeros_like(router_logits_l, dtype=torch.bool)
+                mask_l.scatter_(1, topk_indices_l, True)
+                router_logits_l[~mask_l] = -float('inf')  # 非 Top-K 设为 -inf
                 self.router_weights_l = nn.Softmax(dim=-1)(router_logits_l).mean(dim=0)
 
-        if self.projector_type == 'mlp+moadapter' or 'itaa':
+        if self.projector_type == 'mlp+moadapter':
             self.projector._set_expert_weights(self.router_weights_v)
+        elif self.projector_type == 'itaa':
+            self.itaa_projector._set_expert_weights(self.router_weights_v)
+
         if hasattr(self.llm, "_set_expert_weights"):
             self.llm._set_expert_weights(self.router_weights_l)
 

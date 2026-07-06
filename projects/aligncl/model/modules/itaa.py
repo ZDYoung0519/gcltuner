@@ -24,6 +24,7 @@ class LayerWiseProjectors(nn.Module):
             bias=False
         ):
         super().__init__()
+        self.llm_hidden_size = llm_hidden_size
 
         self.projector_pool = nn.ModuleList([])
         for _ in range(expert_num):
@@ -41,15 +42,35 @@ class LayerWiseProjectors(nn.Module):
                 nn.ReLU() if hidden_act == 'relu' else ACT2FN[hidden_act],
                 nn.Linear(shared_expert_hidden_size, llm_hidden_size, bias=bias)
             )
+        self.use_shared_expert = use_shared_expert
+        
+        self.expert_weights = torch.ones([expert_num]) / expert_num
+    
+    def _set_expert_weights(self, expert_weights):
+        self.expert_weights= expert_weights
+
+    def forward(self, x):
+        result = torch.zeros(*x.shape[:-1], self.llm_hidden_size,
+            device=x.device,
+            dtype=x.dtype
+        )
+        expert_weights = self.expert_weights
+        active_experts = torch.nonzero(expert_weights).squeeze(-1)
+        for i in active_experts.tolist():
+            result += self.projector_pool[i](x)
+        
+        if self.use_shared_expert:
+            result += self.shared_expert(x)
+        return result
 
 
 class AlignLinears(nn.Module):
-    def __init__(self, in_features, out_features, expert_size, bias=False):
+    def __init__(self, in_features, out_features, expert_num, bias=False):
         super().__init__()
         self.shared_linear = nn.Linear(in_features, out_features, bias=bias)
 
         self.weights_pool = nn.ModuleList([])
-        for _ in range(expert_size):
+        for _ in range(expert_num):
             self.weights_pool.append(
                 nn.Linear(in_features, out_features, bias=bias),
             )
@@ -61,7 +82,7 @@ class AlignLinears(nn.Module):
     def forward(self, x):
         expert_weights = self.expert_weights
         if isinstance(expert_weights, list):
-            expert_weights = torch.tensor(expert_weights, device=x.device)    # (expert_size,)
+            expert_weights = torch.tensor(expert_weights, device=x.device)    # (expert_num,)
         active_experts = torch.nonzero(expert_weights).squeeze(-1)
         out = torch.zeros([x.shape[0], self.shared_linear.out_features], device=x.device, dtype=x.dtype)
         for i in active_experts.tolist():
@@ -69,6 +90,7 @@ class AlignLinears(nn.Module):
             out = out + expert_weights[i] * expert_out
         out = out + self.shared_linear(x)
         return out
+
 
 class ITAAMoEProjectors(nn.Module):
     def __init__(
@@ -94,14 +116,15 @@ class ITAAMoEProjectors(nn.Module):
         if visual_select_layers == 'all':
             visual_select_layers = [str(i) for i in range(num_visual_layers)]
         self.visual_select_layers = visual_select_layers
+        self.num_visual_select_layers = len(visual_select_layers)
 
         # layerwise projectors
         self.all_layer_projectors = nn.ModuleList([])
-        for _ in range(len(visual_select_layers)):
+        for _ in range(self.num_visual_select_layers):
             layer_wise_projectors = LayerWiseProjectors(
                 visual_hidden_size,
                 llm_hidden_size,
-                expert_size=expert_num, 
+                expert_num=expert_num, 
                 expert_hidden_size=expert_hidden_size,
                 use_shared_expert=use_shared_expert,
                 shared_expert_hidden_size=shared_expert_hidden_size,
@@ -120,12 +143,14 @@ class ITAAMoEProjectors(nn.Module):
                 for p in layer_wise_projectors.shared_expert.parameters():
                     p.requires_grad_(False)
         
-
         # alignment weighs
         self.align_linears = AlignLinears(text_hidden_size, visual_hidden_size, expert_num)
     
     def _set_expert_weights(self, expert_weights):
         self.expert_weights = expert_weights
+        self.align_linears._set_expert_weights(expert_weights)
+        for m in range(self.num_visual_select_layers):
+            self.all_layer_projectors[m]._set_expert_weights(expert_weights)
 
     def _collect_visual_features(self, visual_outputs, i):
         layer = self.visual_select_layers[i]
@@ -149,18 +174,6 @@ class ITAAMoEProjectors(nn.Module):
         else:
             idx = int(layer)
             feature = visual_outputs.hidden_states[idx][:, 0, :]    # B, d
-        return feature
-    
-    def _collect_visual_features(self, visual_outputs, i):
-        layer = self.visual_select_layers[i]
-        if isinstance(layer, str) and '-' in layer:
-            start, end = layer.split('-')
-            start, end = int(start), int(end)
-            feature = [visual_outputs.hidden_states[idx] for idx in range(start, end+1)]
-            feature = torch.stack(feature, dim=0).mean(dim=0)   # avg pooling
-        else:
-            idx = int(layer)
-            feature = visual_outputs.hidden_states[idx]    # B, L-1, d
         return feature
 
     def forward(self, visual_outputs, text_outputs):
@@ -190,7 +203,7 @@ class ITAAMoEProjectors(nn.Module):
         # Cache projected features for unique layers
         layer_cache = {}
         for layer_idx in unique_layers.tolist():
-            layer_features = self._collect_visual_features(visual_outputs, layer_idx)  # (B, L, d_v)
+            layer_features = self._collect_visual_features(visual_outputs, layer_idx)[:, 1:, :]  # (B, L, d_v)
             projected = self.all_layer_projectors[layer_idx](layer_features)  # (B, L, d_llm)
             layer_cache[layer_idx] = projected
         
@@ -215,4 +228,17 @@ class ITAAMoEProjectors(nn.Module):
         weighted_value = (weights * selected_features).sum(dim=1)  # (B, topk, 1, 1)* (B, topk, L, d_llm) ->(B, L_v, d_llm)
 
         return attention, weighted_value
+    
+
+    def _init_cur_weights_with_previous(self, cur_task):
+        if cur_task == 0:
+            return
         
+        for m in range(self.num_visual_select_layers):
+            self.all_layer_projectors[m].projector_pool[cur_task].load_state_dict(
+                self.all_layer_projectors[m].projector_pool[cur_task-1].state_dict()
+            )
+
+        self.align_linears.weights_pool[cur_task].load_state_dict(
+            self.align_linears.weights_pool[cur_task-1].state_dict()
+        )
