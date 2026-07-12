@@ -21,14 +21,14 @@
 <!-- ***Still working in progress. Please be patient...*** -->
 This repository is built to achieve Generalized Continual Learning of Multimodal Large Language Models.
 
-**Main Features**
-- The codebase is mainly based on [Xtuner], which supports efficient fine-tuning techniques such as FlashAttention, Tritoon kernels, and DeepSpeed.
-- Support different MLLM pre-trained weights, such as Vicuna (No pretrain), LLaVA pre-trained projector, LLaVA instruction-tunend checkpoint. 
-- Support different methods and algorithms for continual instruction tuning, including LoRA, MoELoRA, HiDE, DISCO, AlignCL and etc.
-- Support different benchmarks and evaluations for CL of MLLMs.
+The implementation for paper "EvoAlign: Modeling Cross-Modal Alignment Evolution for Continual Visual Instruction" is included.
+
+
+
 
 
 ## 🔥 News
+- [2026/07/12] [EvoAlign]() is released.
 - [2026/06/25] [GCLTUner](https://github.com/zdyoung0519/gcltuner) is released.
 
 ## ✋ Features
@@ -36,6 +36,7 @@ This repository is built to achieve Generalized Continual Learning of Multimodal
 Continual Instruction Tuning (CIT) Methods:
 - [x] LoRA: Fine-Tuning with LoRA modules.
 - [x] MoELoRA: Fine-Tuning with Mixture of LoRA modules.
+- [x] [EvoAlign](): EvoAlign: Modeling Cross-Modal Alignment Evolution for Continual Visual Instruction Tuning
 
 Working in process...
 <!-- - [ ] [EWC](): LoRA Fine-tuning with EWC penalization.
@@ -43,7 +44,7 @@ Working in process...
 - [ ] [OLoRA]()
 - [ ] [HiDe-LLaVA]()
 - [ ] [DISCO]()
-- [ ] [AlignCL](): Algnment-centricl Continual Adaptation for MLLMs
+
 <!-- - [ ] [Replay](): Replay previous data. -->
 <!-- - [ ] [L2P](): Construct a pool of learnable prompts, and select the prompt that is most relative to the input. -->
 <!-- - [ ] [MR-LoRA](https://arxiv.org/abs/2506.05453): Train isolated LoRA modules for tasks and a Router LoRA to select LoRA at inference.

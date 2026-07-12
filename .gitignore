@@ -135,3 +135,6 @@ docs/zh_cn/_build/
 docs/zh_cn/api/generated/
 
 notebooks
+
+projects/_*
+projects/*/experiments/_*
