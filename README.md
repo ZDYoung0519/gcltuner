@@ -117,13 +117,15 @@ NOTE: After downloading them, you need to modify the path in `gcltuner/data.py`.
 
 
 ### 3. Train And Evaluate
-We provide the training and evaluation scripts in ```projects/${method_name}/experiments/{$exp_name}```. For example, if you want to perform `LoRA` finetuneing on `UCIT` benchmarks, with `LLaVA-v1.5-7b` as initialization, run the following cmd:
+
+#### 3.1 LoRA Example
+We provide the training and evaluation scripts in ```projects/${method_name}/experiments/{$exp_name}```. For example, if you want to perform `LoRA` finetuneing on `UCIT` benchmarks, with `Vicuna-v1.5-7b` as initialization, run the following cmd:
 ```
-bash ./projects/lora/experiments/ucit_llava_v15_7b_inst/run_all.sh
+bash ./projects/lora/experiments/ucit_vicuna_v15_7b/run_all.sh
 ```
 The naming convention for the exp_name is as follows:
 ```
-ucit_llava_v15_7b_inst
+ucit_vicuna_v15_7b
 {benchmark}_{architecture}_{version&model_size}_{pretrains}
 ```
 This represents that the MLLM is initialized with the LLaVA-v1.5-7B model that has undergone both pretraining and instruction fine-tuning.
@@ -131,15 +133,31 @@ This represents that the MLLM is initialized with the LLaVA-v1.5-7B model that h
 The outputs are organized as:
 ```
 # The training log and model weights
-work_dirs/ucit_llava_v15_7b_inst/lora/task${t}
+work_dirs/ucit_vicuna_v15_7b/lora/task${t}
 
 # the evaluation results on task i after fintuning task j
-work_dirs/ucit_llava_v15_7b_inst/lora/eval/task${i}/task${j}
+work_dirs/ucit_vicuna_v15_7b/lora/eval/task${i}/task${j}
 
 # Overoll continual performance
-work_dirs/ucit_llava_v15_7b_inst/lora/eval/metric_matrix.csv
+work_dirs/ucit_vicuna_v15_7b/lora/eval/metric_matrix.csv
 ```
 
+#### 3.2 Train And Evaluate Scripts for different methods
+
+LoRA:
+```
+bash ./projects/lora/experiments/ucit_vicuna_v15_7b/run_all.sh
+bash ./projects/lora/experiments/ucit_llava_v15_7b_pret/run_all.sh
+bash ./projects/lora/experiments/ucit_llava_v15_7b_inst/run_all.sh
+```
+
+
+EvoAlign:
+```
+bash ./projects/aligncl/experiments/ucit_vicuna_v15_7b/run_all.sh
+bash ./projects/aligncl/experiments/ucit_llava_v15_7b_pret/run_all.sh
+bash ./projects/aligncl/experiments/ucit_llava_v15_7b_inst/run_all.sh
+```
 
 
 ## 🤝 Acknowledgement

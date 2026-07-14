@@ -2,8 +2,8 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 conda activate gcltuner-env
 
 # vicuna
-CONFIG=projects/lora/experiments/ucit_vicuna/config.py
-WORKDIR=work_dirs/ucit_vicuna/lora
+CONFIG=projects/lora/experiments/ucit_vicuna_v15_7b/config.py
+WORKDIR=work_dirs/ucit_vicuna_v15_7b/lora
 bash projects/lora/scripts/train.sh 0 $CONFIG $WORKDIR
 bash projects/lora/scripts/train.sh 1 $CONFIG $WORKDIR
 bash projects/lora/scripts/train.sh 2 $CONFIG $WORKDIR

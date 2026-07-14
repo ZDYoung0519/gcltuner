@@ -3,8 +3,8 @@ conda activate gcltuner-env
 
 # vicuna + llava pretarin & instruction-train
 
-CONFIG=projects/lora/experiments/ucit_llava_inst/config.py
-WORKDIR=work_dirs/ucit/llava_inst/lora
+CONFIG=projects/lora/experiments/ucit_llava_v15_7b_inst/config.py
+WORKDIR=work_dirs/ucit_llava_v15_7b_inst/lora
 
 bash projects/lora/scripts/train.sh 0 $CONFIG $WORKDIR
 bash projects/lora/scripts/train.sh 1 $CONFIG $WORKDIR
